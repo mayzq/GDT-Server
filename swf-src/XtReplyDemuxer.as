@@ -2,6 +2,7 @@ package
 {
    import com.sbi.client.SFEvent;
    import avatar.NPCView;
+   import avatar.AvatarWorldView;
    import buddy.BuddyCard;
    import com.sbi.graphics.PaletteHelper;
    import flash.events.TimerEvent;
@@ -36,6 +37,7 @@ package
             _delayTimer.addEventListener("timer",delayTimerHandler,false,0,true);
             _delayTimer.start();
          }
+         AvatarWorldView.micoResetNameBarColors();
          _xtReplyCallbacks = new Vector.<Function>();
          _xtReplyCommands = new Vector.<String>();
          gMainFrame.server.addEventListener("OnXtReply",xtReplyHandler,false,0,true);
@@ -80,6 +82,37 @@ package
          var _loc3_:String = null;
          var _loc4_:int = 0;
          var _loc2_:Function = null;
+
+         
+         // MICO: cor independente do simbolo.
+         if(param1.obj[0] == "xne")
+         {
+            if(param1.obj.length >= 4)
+            {
+               AvatarWorldView.micoReceiveSymbolColor(
+                  String(param1.obj[2]),
+                  String(param1.obj[3])
+               );
+            }
+            return;
+         }
+         
+         if(param1.obj[0] == "xnb")
+         {
+            if(param1.obj.length >= 3)
+            {
+               var micoColor:String = param1.obj.length >= 4
+                  ? String(param1.obj[3])
+                  : "";
+
+               AvatarWorldView.micoReceiveNameBarColor(
+                  String(param1.obj[2]),
+                  micoColor
+               );
+            }
+            return;
+         }
+
          if(param1.obj[0] == "xcc")
          {
             PaletteHelper.handleCustomColors(param1.obj);

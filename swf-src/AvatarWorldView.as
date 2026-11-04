@@ -1,5 +1,8 @@
 package avatar
 {
+   import flash.filters.ColorMatrixFilter;
+   import flash.utils.Dictionary;   
+   import flash.display.DisplayObjectContainer;
    import achievement.AchievementXtCommManager;
    import buddy.BuddyManager;
    import com.sbi.corelib.input.SBTextField;
@@ -68,6 +71,14 @@ package avatar
       // News Crew camera (NameBar.isVIPBadge): the Owner, Moderator,
       // Developer and Verified badges of lib/badges.js, by their def ids.
       private static const PUBLIC_BADGE_IDS:Array = [63,64,66,76];
+      // MICO: cores personalizadas recebidas do servidor.
+      private static var micoNameBarColors:Object = {};
+
+       // MICO: cor personalizada dos medalhoes por jogador.
+       private static var micoSymbolColors:Object = {};
+
+      // Guarda as placas que estao atualmente carregadas.
+      private static var micoActiveViews:Dictionary = new Dictionary(true);
       
       private static const GLOW_LAND_DEFAULT_COLOR:int = 5586479;
       
@@ -250,6 +261,14 @@ package avatar
       private var _typingUntil:int;
       
       private var _namebar:NameBar;
+
+      private var _micoLeftBaseFilters:Array;
+
+      private var _micoMidBaseFilters:Array;
+
+      private var _micoNameBaseFilters:Array;
+
+      private var _micoSymbolBaseFilters:Dictionary = new Dictionary(true);
       
       private var _pos:Point;
       
@@ -432,6 +451,329 @@ package avatar
          super();
       }
       
+      public static function micoResetNameBarColors() : void
+      {
+         micoNameBarColors = {};
+
+         micoSymbolColors = {};
+
+         for(var view:Object in micoActiveViews)
+         {
+            AvatarWorldView(view).micoApplyNameBarColor();
+            AvatarWorldView(view).micoApplySymbolColor();
+         }
+      }
+
+      public static function micoReceiveNameBarColor(
+         username:String,
+         hex:String
+      ) : void
+      {
+         if(!username || username.length > 50)
+         {
+            return;
+         }
+
+         var key:String = "u:" + username.toLowerCase();
+
+         if(hex == "")
+         {
+            delete micoNameBarColors[key];
+         }
+         else
+         {
+            if(!/^#[0-9a-fA-F]{6}$/.test(hex))
+            {
+               return;
+            }
+
+            micoNameBarColors[key] = hex;
+         }
+
+         // Atualiza os personagens que ja estao na tela.
+         for(var view:Object in micoActiveViews)
+         {
+            AvatarWorldView(view).micoApplyNameBarColor();
+         }
+      }
+
+
+public static function micoReceiveSymbolColor(
+   username:String,
+   hex:String
+) : void
+{
+   if(!username || username.length > 50)
+   {
+      return;
+   }
+
+   var key:String = "u:" + username.toLowerCase();
+
+   if(hex == "")
+   {
+      delete micoSymbolColors[key];
+   }
+   else
+   {
+      if(!/^#[0-9a-fA-F]{6}$/.test(hex))
+      {
+         return;
+      }
+
+      micoSymbolColors[key] = hex;
+   }
+
+   for(var view:Object in micoActiveViews)
+{
+   var micoView:AvatarWorldView = AvatarWorldView(view);
+
+   micoView.micoApplySymbolColor();
+}
+}
+
+private function micoTintSymbolParts(
+   root:DisplayObject,
+   color:uint,
+   enabled:Boolean
+) : void
+{
+   var group:DisplayObjectContainer =
+      root as DisplayObjectContainer;
+
+   if(group == null)
+   {
+      return;
+   }
+
+   for(var i:int = 0; i < group.numChildren; i++)
+   {
+      var child:DisplayObject = group.getChildAt(i);
+
+      // Preservar os icones e textos do medalhao.
+      if(child.name == "light" ||
+         child.name == "icon" ||
+         child.name == "txt" ||
+         child.name == "text")
+      {
+         continue;
+      }
+
+      if(child.name == "norm" || child.name == "dark")
+      {
+         var original:Array =
+            _micoSymbolBaseFilters[child] as Array;
+
+         if(original == null)
+         {
+            original = child.filters.concat();
+            _micoSymbolBaseFilters[child] = original;
+         }
+
+         var filters:Array = original.concat();
+
+         if(enabled)
+         {
+            var shade:Number =
+               child.name == "dark" ? 0.6 : 1.0;
+
+            var r:Number = (color >> 16 & 255) * shade;
+            var g:Number = (color >> 8 & 255) * shade;
+            var b:Number = (color & 255) * shade;
+
+            var factor:Number = 0.8 / 255;
+
+            var matrix:Array = [
+               r * factor * 0.2126, r * factor * 0.7152, r * factor * 0.0722, 0, r * 0.2,
+               g * factor * 0.2126, g * factor * 0.7152, g * factor * 0.0722, 0, g * 0.2,
+               b * factor * 0.2126, b * factor * 0.7152, b * factor * 0.0722, 0, b * 0.2,
+               0, 0, 0, 1, 0
+            ];
+
+            filters.push(new ColorMatrixFilter(matrix));
+         }
+
+         child.filters = filters;
+      }
+      else
+      {
+         micoTintSymbolParts(child, color, enabled);
+      }
+   }
+}
+
+private function micoApplySymbolColor() : void
+      {
+         if(!_namebar || !_avatar || !_avatar.userName)
+         {
+            return;
+         }
+
+         var symbol:Object = _namebar["selnub"];
+         if(symbol == null)
+         {
+            return;
+         }
+
+         var nub:DisplayObject = symbol["nub"] as DisplayObject;
+         if(nub == null)
+         {
+            return;
+         }
+
+         var key:String = "u:" + _avatar.userName.toLowerCase();
+         var enabled:Boolean = micoSymbolColors.hasOwnProperty(key);
+
+         // Os filtros originais ficam salvos para !simbolo reset.
+         var original:Array = _micoSymbolBaseFilters[nub] as Array;
+         if(original == null)
+         {
+            original = nub.filters.concat();
+            _micoSymbolBaseFilters[nub] = original;
+         }
+
+         var filters:Array = original.concat();
+         if(enabled)
+         {
+            var hex:String = String(micoSymbolColors[key]);
+            if(!/^#[0-9a-fA-F]{6}$/.test(hex))
+            {
+               nub.filters = filters;
+               return;
+            }
+
+            var color:uint = uint(parseInt(hex.substr(1),16));
+            var red:Number = color >> 16 & 255;
+            var green:Number = color >> 8 & 255;
+            var blue:Number = color & 255;
+
+            // Brilho da cor solicitada (nao confundir com brilho do desenho).
+            var brightness:Number = red * 0.2126 +
+                                    green * 0.7152 +
+                                    blue * 0.0722;
+
+            // A arte original tem a pata clara e o circulo mais escuro.
+            // Usamos esse contraste de pixels em vez de multiplicar ambos
+            // pelo HEX, o que apagava a pata ao escolher preto.
+            // Para cores claras invertemos o contraste: pata escura.
+            var gain:Number = brightness < 165 ? 2.1 : -1.8;
+            var anchor:Number = 145;
+
+            var matrix:Array = [
+               gain * 0.2126, gain * 0.7152, gain * 0.0722, 0, red - gain * anchor,
+               gain * 0.2126, gain * 0.7152, gain * 0.0722, 0, green - gain * anchor,
+               gain * 0.2126, gain * 0.7152, gain * 0.0722, 0, blue - gain * anchor,
+               0, 0, 0, 1, 0
+            ];
+
+            filters.push(new ColorMatrixFilter(matrix));
+         }
+
+         nub.filters = filters;
+      }
+
+      private function micoApplyNameBarColor() : void
+      {
+         if(!_namebar || !_avatar || !_avatar.userName)
+         {
+            return;
+         }
+
+         var left:DisplayObject = _namebar["e"] as DisplayObject;
+         var mid:DisplayObject = _namebar["m"] as DisplayObject;
+         var namePart:DisplayObject = _namebar["c"] as DisplayObject;
+
+         if(!left || !mid)
+         {
+            return;
+         }
+
+         var leftFilters:Array = _micoLeftBaseFilters
+            ? _micoLeftBaseFilters.concat() : [];
+
+         var midFilters:Array = _micoMidBaseFilters
+            ? _micoMidBaseFilters.concat() : [];
+
+         var nameFilters:Array = _micoNameBaseFilters
+            ? _micoNameBaseFilters.concat() : [];
+
+         var key:String = "u:" + _avatar.userName.toLowerCase();
+
+         // Restaurar a placa e o nome originais.
+         if(!micoNameBarColors.hasOwnProperty(key))
+         {
+            left.filters = leftFilters;
+            mid.filters = midFilters;
+
+            if(namePart)
+            {
+               namePart.filters = nameFilters;
+            }
+
+            return;
+         }
+
+         var hex:String = String(micoNameBarColors[key]);
+         var rgb:uint = uint(parseInt(hex.substr(1), 16));
+
+         var red:Number = rgb >> 16 & 255;
+         var green:Number = rgb >> 8 & 255;
+         var blue:Number = rgb & 255;
+
+         // Filtro original da cor personalizada.
+         var factor:Number = 0.8 / 255;
+
+         var matrix:Array = [
+            red * factor * 0.2126, red * factor * 0.7152, red * factor * 0.0722, 0, red * 0.2,
+            green * factor * 0.2126, green * factor * 0.7152, green * factor * 0.0722, 0, green * 0.2,
+            blue * factor * 0.2126, blue * factor * 0.7152, blue * factor * 0.0722, 0, blue * 0.2,
+            0, 0, 0, 1, 0
+         ];
+
+         leftFilters.push(new ColorMatrixFilter(matrix));
+         midFilters.push(new ColorMatrixFilter(matrix));
+
+         left.filters = leftFilters;
+         mid.filters = midFilters;
+
+         if(namePart)
+         {
+            // Estima o brilho da cor apos o filtro da placa.
+            var effectiveBrightness:Number =
+               (red * 0.2126 + green * 0.7152 + blue * 0.0722) * 0.6;
+
+            var isLight:Boolean = effectiveBrightness >= 110;
+
+            // Fundo claro: marrom escuro.
+            // Fundo escuro: creme claro.
+            var textColor:uint = isLight ? 0x432817 : 0xFFF9EE;
+
+            // Contorno oposto ao texto para reforcar a leitura.
+            var outlineColor:uint = isLight ? 0xFFF4DE : 0x25170F;
+
+            var tr:uint = textColor >> 16 & 255;
+            var tg:uint = textColor >> 8 & 255;
+            var tb:uint = textColor & 255;
+
+            // Modifica somente o componente do nome.
+            var textMatrix:Array = [
+               0, 0, 0, 0, tr,
+               0, 0, 0, 0, tg,
+               0, 0, 0, 0, tb,
+               0, 0, 0, 1, 0
+            ];
+
+            nameFilters.push(new ColorMatrixFilter(textMatrix));
+
+            nameFilters.push(
+               new GlowFilter(outlineColor, 0.60, 2, 2, 2, 1, false, false)
+            );
+
+            namePart.filters = nameFilters;
+         }
+      }
+
+
       public static function convertToIdle(param1:Number) : Object
       {
          var _loc2_:int = 14;
@@ -572,6 +914,8 @@ package avatar
          setNamebarListenersWithUserName(param1.userName);
          toggleNamebarSelNub(param8);
          _namebar.setColorAndBadge(param8);
+         micoApplyNameBarColor();
+         micoApplySymbolColor();
          var _loc11_:UserInfo = gMainFrame.userInfo.getUserInfoByUserName(userName);
          if(_loc11_)
          {
@@ -643,9 +987,9 @@ package avatar
          _leapState = -1;
          _bArrowEnabled = true;
       }
-      
       override public function destroy(param1:Boolean = false) : void
       {
+         delete micoActiveViews[this];
          QuestManager.removeTorch(this);
          _bArrowEnabled = false;
          if(parent)
@@ -2291,11 +2635,28 @@ package avatar
          }
          LocalizationManager.findAllTextfields(_namebar.hostTagMC);
          _timeSinceLastHostingUpdate = 0;
+         
          _namebar.x = -15;
          _namebar.y = 18;
          addChild(_namebar);
+
+         // MICO: guardar os filtros originais da placa.
+         var micoLeft:DisplayObject = _namebar["e"] as DisplayObject;
+         var micoMid:DisplayObject = _namebar["m"] as DisplayObject;
+
+         _micoLeftBaseFilters = micoLeft ? micoLeft.filters.concat() : [];
+         _micoMidBaseFilters = micoMid ? micoMid.filters.concat() : [];
+
+         // Salvar os filtros originais do nome para o comando reset.
+         var micoNamePart:DisplayObject = _namebar["c"] as DisplayObject;
+
+         _micoNameBaseFilters = micoNamePart
+            ? micoNamePart.filters.concat()
+            : [];
+         // Registrar a placa para receber atualizacoes xnb.
+         micoActiveViews[this] = true;
       }
-      
+   
       private function setNamebarListenersWithUserName(param1:String) : void
       {
          if(!param1)
@@ -2778,6 +3139,7 @@ package avatar
                   _namebar.setAvName(_avatar.avName);
                }
             }
+            micoApplyNameBarColor();
             _chatBalloon.avType = _avatar.avTypeId;
          }
          if(_particleIdling)

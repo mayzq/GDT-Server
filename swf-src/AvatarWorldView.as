@@ -79,6 +79,47 @@ package avatar
 
       // Guarda as placas que estao atualmente carregadas.
       private static var micoActiveViews:Dictionary = new Dictionary(true);
+
+      // MICO-LAYERS-V3: replicacao opcional com cache por nome e animal.
+      private static var micoLayerOrderCache:Object = {};
+
+      public static function micoResetLayerOrders() : void
+      {
+         micoLayerOrderCache = {};
+      }
+
+      public static function micoLayerOrderFor(param1:String, param2:int) : Array
+      {
+         if(!param1 || param2 < 0)
+         {
+            return null;
+         }
+         var key:String = "o:" + param1.toLowerCase() + ":" + param2;
+         var stored:Array = micoLayerOrderCache[key] as Array;
+         return stored ? stored.concat() : null;
+      }
+
+      public static function micoReceiveLayerOrder(param1:String, param2:int, param3:Array) : void
+      {
+         if(!param1 || param1.length > 50 || param2 < 0 || !param3 || param3.length > 24)
+         {
+            return;
+         }
+         var key:String = "o:" + param1.toLowerCase() + ":" + param2;
+         micoLayerOrderCache[key] = param3.concat();
+         for(var view:Object in micoActiveViews)
+         {
+            var v:AvatarWorldView = view as AvatarWorldView;
+            if(v && v.avatarData && v.avatarData.userName &&
+               v.avatarData.userName.toLowerCase() == param1.toLowerCase() &&
+               v.avatarData.perUserAvId == param2)
+            {
+               v.micoSetPreviewOrder(param3.length ? param3 : null);
+            }
+         }
+      }
+
+
       
       private static const GLOW_LAND_DEFAULT_COLOR:int = 5586479;
       
@@ -928,6 +969,14 @@ private function micoApplySymbolColor() : void
             _layerAnim.layers = setLayerHelper();
          }
          _layerAnim.local = userId == AvatarManager.playerSfsUserId;
+         var savedOrder:Array = micoLayerOrderFor(param1.userName,param1.perUserAvId);
+         micoSetPreviewOrder(savedOrder);
+         // O primeiro avatar local faz handshake. O servidor so responde a
+         // clientes compativeis, sem enviar xlr a versoes antigas do Mico.
+         if(userId == AvatarManager.playerSfsUserId)
+         {
+            gMainFrame.server.setXtObject_Str("xlr",["hello"]);
+         }
          var _loc10_:LayerBitmap = _layerAnim.bitmap;
          _loc10_.x = 0;
          _loc10_.y = 0;

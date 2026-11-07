@@ -5,6 +5,7 @@ package gui
    import achievement.AchievementXtCommManager;
    import avatar.Avatar;
    import avatar.AvatarEditorView;
+   import avatar.AvatarWorldView;
    import avatar.AvatarEvent;
    import avatar.AvatarInfo;
    import avatar.AvatarManager;
@@ -47,6 +48,7 @@ package gui
    import item.ItemXtCommManager;
    import loader.DenItemHelper;
    import loader.MediaHelper;
+   import com.sbi.loader.ImageServerURL;
    import localization.LocalizationManager;
    import pet.GuiPet;
    import pet.PetItem;
@@ -258,7 +260,19 @@ package gui
 
       private var _inventoryPlusBtn:Sprite;
 
-      private var _inventoryMinusBtn:Sprite;
+       private var _inventoryMinusBtn:Sprite;
+
+       // MICO-LAYERS-V2: ordem local do editor, sem salvamento ainda.
+       private var _micoLayersButton:Sprite;
+       private var _micoLayersMenu:Sprite;
+       private var _micoLayersMenuCallback:Function;
+       private var _micoLayersCategory:int = -1;
+       private var _micoLayersPage:int = 0;
+       private var _micoLayersPageActions:Array = [];
+       private var _micoLayersSelectedInv:int = -1;
+       // MICO-LAYERS-V3: salvar apos as mudancas de roupa.
+       private var _micoLayersDirty:Boolean = false;
+       private var _micoLayersOrder:Array;
       
       public var numClothingItemsInTradeListInitially:int;
       
@@ -382,6 +396,16 @@ package gui
          var _loc1_:* = null;
          DarkenManager.showLoadingSpiral(false);
          KeepAlive.stopKATimer(avEditor);
+         hideMicoLayersMenu();
+         if(_micoLayersButton)
+         {
+            _micoLayersButton.removeEventListener("mouseDown",onMicoLayersToggle);
+            if(_micoLayersButton.parent)
+            {
+               _micoLayersButton.parent.removeChild(_micoLayersButton);
+            }
+         }
+         _micoLayersButton = null;
          // the editor can be destroyed (leaving the room) before its artwork
          // came, or after setting it up threw halfway (#1009, #2025 below)
          if(avEditor)
@@ -576,6 +600,12 @@ package gui
                createItemWindows(_currClothesArray,avEditor.itemBlock);
             }
             setupInventoryControls();
+            setupMicoLayers();
+            _micoLayersOrder = AvatarWorldView.micoLayerOrderFor(_worldAvatar.userName,_worldAvatar.perUserAvId);
+            if(_avatarEditorView)
+            {
+               _avatarEditorView.micoSetPreviewOrder(_micoLayersOrder);
+            }
             addListeners();
             KeepAlive.startKATimer(avEditor);
             _loadingMediaHelper.destroy();
@@ -1057,6 +1087,10 @@ package gui
                   _tradeItemsOut = new TradeItemCollection();
                }
             }
+            if(!_waitForIuResponse)
+            {
+               micoSaveLayerOrder();
+            }
             if(!_waitForIuResponse && !_waitForApResponse)
             {
                if(_onCloseCallback != null && _shop == null && _recycle == null)
@@ -1090,6 +1124,20 @@ package gui
          }
       }
       
+      // MICO-LAYERS-V3: salva apenas ao fechar o editor.
+      // Se ha roupas novas, o envio espera a confirmacao do pacote iu.
+      private function micoSaveLayerOrder() : void
+      {
+         if(!_micoLayersDirty || !_worldAvatar)
+         {
+            return;
+         }
+         var order:Array = _micoLayersOrder == null ? [] : micoOrderIds();
+         var params:Array = ["set",_worldAvatar.perUserAvId,order.length].concat(order);
+         gMainFrame.server.setXtObject_Str("xlr",params);
+         _micoLayersDirty = false;
+      }
+
       private function itemUseResponse(param1:IntItemCollection, param2:IntItemCollection, param3:Boolean) : void
       {
          var _loc4_:int = 0;
@@ -1109,6 +1157,10 @@ package gui
                DebugUtility.debugTrace("Item #" + param2.getIntItem(_loc4_) + ": TAKEN OFF");
                _loc5_++;
             }
+         }
+         if(param3)
+         {
+            micoSaveLayerOrder();
          }
          applyChanges(param3);
       }
@@ -2822,6 +2874,462 @@ package gui
          _inventoryMinusBtn.addEventListener("mouseDown",onInventoryMinus,false,0,true);
          _loc1_.addChild(_inventoryPlusBtn);
          _loc1_.addChild(_inventoryMinusBtn);
+      }
+
+      // Mico: validação visual de botão e lista antes de mexer no renderizador.
+      // O menu usa makeTextMenu (mesmas cores/fonte do menu de ordenação atual).
+      // MICO-LAYERS-V2: menus de camadas e ordem visual apenas na previa.
+      // O botao fica DENTRO da area do animal, nao no rodape do inventario.
+      private function setupMicoLayers() : void
+      {
+         if(_isForMannequin || !avEditor || !avEditor.charBox)
+         {
+            return;
+         }
+         var button:Sprite = new Sprite();
+         var title:TextField = new TextField();
+         button.graphics.lineStyle(2,8349508);
+         button.graphics.beginFill(16774084);
+         button.graphics.drawRoundRect(0,0,86,24,10,10);
+         button.graphics.endFill();
+         title.embedFonts = AJClient.hasGameFont();
+         title.defaultTextFormat = new TextFormat("CCDigitalDelivery",13,6045213,true);
+         title.text = "Layers";
+         title.width = 74;
+         title.height = 22;
+         title.x = 9;
+         title.y = 3;
+         title.selectable = false;
+         title.mouseEnabled = false;
+         button.addChild(title);
+         button.buttonMode = true;
+         button.mouseChildren = false;
+         var bounds:Rectangle = avEditor.charBox.getBounds(avEditor);
+         button.x = int(bounds.right - 95);
+         button.y = int(bounds.top + 10);
+         button.addEventListener("mouseDown",onMicoLayersToggle,false,0,true);
+         avEditor.addChild(button);
+         _micoLayersButton = button;
+      }
+
+      private function hideMicoLayersMenu() : void
+      {
+         if(_micoLayersMenu && _micoLayersMenu.parent)
+         {
+            _micoLayersMenu.parent.removeChild(_micoLayersMenu);
+         }
+         _micoLayersMenu = null;
+      }
+
+      // MICO-LAYERS-V4: menu maior, sem alterar a renderizacao ou protocolo.
+      private function showMicoLayersMenu(param1:Array, param2:Function, param3:String = "Layers") : void
+      {
+         hideMicoLayersMenu();
+         if(!avEditor || !_micoLayersButton)
+         {
+            return;
+         }
+         _micoLayersMenuCallback = param2;
+         var menu:Sprite = new Sprite();
+         var menuWidth:int = 198;
+         var rowHeight:int = 27;
+         var top:int = 31;
+         menu.graphics.lineStyle(2,8349508);
+         menu.graphics.beginFill(16774084);
+         menu.graphics.drawRoundRect(0,0,menuWidth,top + param1.length * rowHeight + 6,14,14);
+         menu.graphics.endFill();
+         menu.graphics.lineStyle(1,8349508,0.40);
+         menu.graphics.moveTo(8,top - 3);
+         menu.graphics.lineTo(menuWidth - 8,top - 3);
+         var heading:TextField = new TextField();
+         heading.embedFonts = AJClient.hasGameFont();
+         heading.defaultTextFormat = new TextFormat("CCDigitalDelivery",15,6045213,true);
+         heading.text = param3.length > 26 ? param3.substr(0,25) + "..." : param3;
+         heading.x = 11;
+         heading.y = 6;
+         heading.width = menuWidth - 20;
+         heading.height = 23;
+         heading.selectable = false;
+         heading.mouseEnabled = false;
+         menu.addChild(heading);
+         var i:int = 0;
+         for each(var label:String in param1)
+         {
+            var line:Sprite = new Sprite();
+            line.name = "layerRow" + i;
+            line.x = 5;
+            line.y = top + i * rowHeight;
+            micoLayersPaintRow(line,false);
+            var word:TextField = new TextField();
+            word.embedFonts = AJClient.hasGameFont();
+            word.defaultTextFormat = new TextFormat("CCDigitalDelivery",14,6045213,true);
+            word.text = label;
+            word.x = 8;
+            word.y = 3;
+            word.width = menuWidth - 24;
+            word.height = 22;
+            word.selectable = false;
+            word.mouseEnabled = false;
+            line.addChild(word);
+            line.buttonMode = true;
+            line.mouseChildren = false;
+            line.addEventListener("mouseDown",onMicoLayersRowPick,false,0,true);
+            line.addEventListener("mouseOver",onMicoLayersRowOver,false,0,true);
+            line.addEventListener("mouseOut",onMicoLayersRowOut,false,0,true);
+            menu.addChild(line);
+            i++;
+         }
+         // MICO-LAYERS-V4-PTBR-SIDE: menu no painel lateral direito.
+         // O botao Layers continua exatamente na posicao atual.
+         var avatarBounds:Rectangle = avEditor.charBox.getBounds(avEditor);
+         var editorBounds:Rectangle = avEditor.getBounds(avEditor);
+         menu.x = int(avatarBounds.right + 10);
+         menu.y = int(avatarBounds.top + 45);
+         if(menu.x + menuWidth > editorBounds.right - 6)
+         {
+            menu.x = int(editorBounds.right - menuWidth - 6);
+         }
+         avEditor.addChild(menu);
+         _micoLayersMenu = menu;
+      }
+
+      private function micoLayersPaintRow(param1:Sprite, param2:Boolean) : void
+      {
+         param1.graphics.clear();
+         param1.graphics.beginFill(param2 ? 8349508 : 16774084,param2 ? 0.20 : 0);
+         param1.graphics.drawRoundRect(0,0,188,25,9,9);
+         param1.graphics.endFill();
+      }
+
+      private function onMicoLayersRowOver(param1:MouseEvent) : void
+      {
+         micoLayersPaintRow(param1.currentTarget as Sprite,true);
+      }
+
+      private function onMicoLayersRowOut(param1:MouseEvent) : void
+      {
+         micoLayersPaintRow(param1.currentTarget as Sprite,false);
+      }
+
+      private function onMicoLayersRowPick(param1:MouseEvent) : void
+      {
+         param1.stopPropagation();
+         var target:Sprite = param1.currentTarget as Sprite;
+         if(target && _micoLayersMenuCallback != null)
+         {
+            var fn:Function = _micoLayersMenuCallback;
+            var index:int = int(target.name.substr(8));
+            AJAudio.playSubMenuBtnClick();
+            fn(index);
+         }
+      }
+
+      private function onMicoLayersToggle(param1:MouseEvent) : void
+      {
+         param1.stopPropagation();
+         if(_micoLayersMenu != null)
+         {
+            hideMicoLayersMenu();
+         }
+         else
+         {
+            showMicoLayerGroups();
+         }
+      }
+
+      private function micoLayerGroup(param1:Item) : int
+      {
+         if(param1.layerId >= 8 && param1.layerId <= 10)
+         {
+            return 0; // Head
+         }
+         if(param1.layerId == 7)
+         {
+            return 1; // Neck
+         }
+         if(param1.layerId == 6)
+         {
+            return 2; // Back
+         }
+         if(param1.layerId == 5)
+         {
+            return 3; // Legs
+         }
+         if(param1.layerId == 4)
+         {
+            return 4; // Tail
+         }
+         return -1;
+      }
+
+      private function micoWornItems() : Array
+      {
+         var result:Array = [];
+         if(!_avatarEditorView || !_avatarEditorView.viewAvatar)
+         {
+            return result;
+         }
+         var collection:AccItemCollection = _avatarEditorView.viewAvatar.accShownItems;
+         if(!collection)
+         {
+            return result;
+         }
+         for each(var piece:Item in collection.getCoreArray())
+         {
+            if(piece && piece.type == 1 && micoLayerGroup(piece) >= 0 &&
+               piece.getInUse(_avatarEditorView.viewAvatar.avInvId))
+            {
+               result.push(piece);
+            }
+         }
+         return result;
+      }
+
+      private function micoFindItem(param1:int, param2:Array) : Item
+      {
+         for each(var piece:Item in param2)
+         {
+            if(piece.invIdx == param1)
+            {
+               return piece;
+            }
+         }
+         return null;
+      }
+
+      private function micoOrderIds() : Array
+      {
+         var shown:Array = micoWornItems();
+         var order:Array = [];
+         if(_micoLayersOrder)
+         {
+            for each(var id:int in _micoLayersOrder)
+            {
+               if(micoFindItem(id,shown) != null && order.indexOf(id) < 0)
+               {
+                  order.push(id);
+               }
+            }
+         }
+         for each(var piece:Item in shown)
+         {
+            if(order.indexOf(piece.invIdx) < 0)
+            {
+               order.push(piece.invIdx);
+            }
+         }
+         return order;
+      }
+
+      private function micoCategoryItems() : Array
+      {
+         var result:Array = [];
+         var shown:Array = micoWornItems();
+         for each(var id:int in micoOrderIds())
+         {
+            var piece:Item = micoFindItem(id,shown);
+            if(piece && micoLayerGroup(piece) == _micoLayersCategory)
+            {
+               result.push(piece);
+            }
+         }
+         return result;
+      }
+
+      private function showMicoLayerGroups() : void
+      {
+         _micoLayersCategory = -1;
+         var counts:Array = [0,0,0,0,0];
+         for each(var piece:Item in micoWornItems())
+         {
+            var g:int = micoLayerGroup(piece);
+            if(g >= 0)
+            {
+               counts[g]++;
+            }
+         }
+         var names:Array = ["Head","Neck","Back","Legs","Tail"];
+         var labels:Array = [];
+         for(var i:int = 0; i < names.length; i++)
+         {
+            labels.push(names[i] + " (" + counts[i] + ")");
+         }
+         labels.push("Reset");
+         labels.push("Close");
+         showMicoLayersMenu(labels,onMicoLayerGroupSelected);
+      }
+
+      private function onMicoLayerGroupSelected(param1:int) : void
+      {
+         if(param1 == 5)
+         {
+            showMicoLayersMenu(["Restore default", "Cancel"],onMicoLayerResetChoice,"Reset all layers?");
+         }
+         else if(param1 >= 0 && param1 < 5)
+         {
+            _micoLayersCategory = param1;
+            _micoLayersPage = 0;
+            showMicoLayerItems();
+         }
+         else
+         {
+            hideMicoLayersMenu();
+         }
+      }
+
+      private function onMicoLayerResetChoice(param1:int) : void
+      {
+         if(param1 == 0)
+         {
+            _micoLayersOrder = null;
+            _micoLayersDirty = true;
+            _micoLayersSelectedInv = -1;
+            if(_avatarEditorView)
+            {
+               _avatarEditorView.micoSetPreviewOrder(null);
+            }
+         }
+         showMicoLayerGroups();
+      }
+
+      private function showMicoLayerItems() : void
+      {
+         var items:Array = micoCategoryItems();
+         var start:int = _micoLayersPage * 5;
+         if(start >= items.length && _micoLayersPage > 0)
+         {
+            _micoLayersPage--;
+            start = _micoLayersPage * 5;
+         }
+         _micoLayersPageActions = [];
+         var labels:Array = [];
+         for(var i:int = start; i < items.length && i < start + 5; i++)
+         {
+            var piece:Item = items[i] as Item;
+            var name:String = piece.name ? piece.name : ("Item " + piece.defId);
+            var selected:String = piece.invIdx == _micoLayersSelectedInv ? "> " : "  ";
+            labels.push(selected + (i + 1) + ". " + name.substr(0,20));
+            _micoLayersPageActions.push({"kind":"item","id":piece.invIdx});
+         }
+         if(labels.length == 0)
+         {
+            labels.push("No equipped items");
+            _micoLayersPageActions.push({"kind":"empty"});
+         }
+         if(_micoLayersPage > 0)
+         {
+            labels.push("Previous page");
+            _micoLayersPageActions.push({"kind":"prev"});
+         }
+         if(start + 5 < items.length)
+         {
+            labels.push("Next page");
+            _micoLayersPageActions.push({"kind":"next"});
+         }
+         labels.push("Back to categories");
+         _micoLayersPageActions.push({"kind":"back"});
+         var groups:Array = ["Head","Neck","Back","Legs","Tail"];
+         var heading:String = _micoLayersCategory >= 0 && _micoLayersCategory < 5 ? groups[_micoLayersCategory] : "Clothing";
+         showMicoLayersMenu(labels,onMicoLayerItemSelected,heading + " - " + items.length + " worn");
+      }
+
+      private function onMicoLayerItemSelected(param1:int) : void
+      {
+         if(param1 < 0 || param1 >= _micoLayersPageActions.length)
+         {
+            return;
+         }
+         var action:Object = _micoLayersPageActions[param1];
+         if(action.kind == "item")
+         {
+            _micoLayersSelectedInv = int(action.id);
+            showMicoLayerActions();
+         }
+         else if(action.kind == "next")
+         {
+            _micoLayersPage++;
+            showMicoLayerItems();
+         }
+         else if(action.kind == "prev")
+         {
+            _micoLayersPage--;
+            showMicoLayerItems();
+         }
+         else if(action.kind == "back")
+         {
+            showMicoLayerGroups();
+         }
+      }
+
+      private function showMicoLayerActions() : void
+      {
+         var selected:Item = micoFindItem(_micoLayersSelectedInv,micoWornItems());
+         if(!selected)
+         {
+            showMicoLayerItems();
+            return;
+         }
+         var name:String = selected.name ? selected.name : ("Item " + selected.defId);
+         showMicoLayersMenu(["Avançar (+1)","Recuar (-1)","Trazer para frente", "Enviar para trás", "Voltar aos itens"],onMicoLayerActionSelected,name);
+      }
+
+      private function onMicoLayerActionSelected(param1:int) : void
+      {
+         if(param1 == 0 || param1 == 1)
+         {
+            micoMoveLayer(param1 == 0 ? 1 : -1);
+         }
+         else if(param1 == 2 || param1 == 3)
+         {
+            // No maximo 24 itens podem estar equipados; repetir e seguro,
+            // ja que micoMoveLayer deixa de mover ao chegar ao limite do slot.
+            var direction:int = param1 == 2 ? 1 : -1;
+            for(var step:int = 0; step < 24; step++)
+            {
+               micoMoveLayer(direction);
+            }
+         }
+         if(param1 >= 0 && param1 <= 3)
+         {
+            showMicoLayerActions();
+         }
+         else
+         {
+            showMicoLayerItems();
+         }
+      }
+
+      private function micoDrawSlot(param1:Item) : int
+      {
+         var index:int = ImageServerURL.instance.getLayerIndex(param1.accId);
+         return index > 0 && index <= 10 ? index : param1.layerId;
+      }
+
+      private function micoMoveLayer(param1:int) : void
+      {
+         var order:Array = micoOrderIds();
+         var shown:Array = micoWornItems();
+         var chosen:Item = micoFindItem(_micoLayersSelectedInv,shown);
+         if(!chosen)
+         {
+            return;
+         }
+         var start:int = order.indexOf(_micoLayersSelectedInv);
+         var slot:int = micoDrawSlot(chosen);
+         for(var k:int = start + param1; k >= 0 && k < order.length; k += param1)
+         {
+            var nextItem:Item = micoFindItem(int(order[k]),shown);
+            if(nextItem && micoDrawSlot(nextItem) == slot)
+            {
+               order[start] = order[k];
+               order[k] = chosen.invIdx;
+               _micoLayersOrder = order;
+               _micoLayersDirty = true;
+               // Salva apenas quando o editor for fechado.
+               _avatarEditorView.micoSetPreviewOrder(order);
+               return;
+            }
+         }
       }
 
       private function createSmallButton(param1:String) : Sprite

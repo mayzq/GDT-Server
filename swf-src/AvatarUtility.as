@@ -428,7 +428,9 @@ package avatar
                   _loc7_ = {
                      "l":_loc9_.accId,
                      "c":_loc6_,
-                     "d":_loc9_.defId
+                     "d":_loc9_.defId,
+                     "i":_loc9_.invIdx,
+                     "t":_loc9_.type
                   };
                   _loc8_.push(_loc7_);
                }

@@ -38,6 +38,7 @@ package
             _delayTimer.start();
          }
          AvatarWorldView.micoResetNameBarColors();
+         AvatarWorldView.micoResetLayerOrders();
          _xtReplyCallbacks = new Vector.<Function>();
          _xtReplyCommands = new Vector.<String>();
          gMainFrame.server.addEventListener("OnXtReply",xtReplyHandler,false,0,true);
@@ -85,6 +86,32 @@ package
 
          
          // MICO: cor independente do simbolo.
+         // MICO-LAYERS-V3: sincronizacao autorizada pelo servidor.
+         if(param1.obj[0] == "xlr")
+         {
+            if(param1.obj.length >= 5)
+            {
+               var count:int = int(param1.obj[4]);
+               if(count >= 0 && count <= 24 && param1.obj.length == 5 + count)
+               {
+                  var order:Array = [];
+                  for(var i:int = 0; i < count; i++)
+                  {
+                     var inv:int = int(param1.obj[5 + i]);
+                     if(inv >= 0 && order.indexOf(inv) < 0)
+                     {
+                        order.push(inv);
+                     }
+                  }
+                  if(order.length == count)
+                  {
+                     AvatarWorldView.micoReceiveLayerOrder(String(param1.obj[2]),int(param1.obj[3]),order);
+                  }
+               }
+            }
+            return;
+         }
+
          if(param1.obj[0] == "xne")
          {
             if(param1.obj.length >= 4)

@@ -18,6 +18,8 @@ package avatar
       public var avTypeChangedCallback:Function;
       
       public var onAvatarChangedCallback:Function;
+
+      private var _micoPreviewOrder:Array;
       
       private var _isOffScreen:Boolean;
       
@@ -57,7 +59,7 @@ package avatar
          _layerAnim.avDefId = _avatar.avTypeId;
          if(_avatar.colors)
          {
-            _layerAnim.layers = setLayerHelper();
+            _layerAnim.layers = micoApplyPreviewOrder(setLayerHelper());
          }
          this.addChild(_layerAnim.bitmap);
       }
@@ -89,7 +91,7 @@ package avatar
             _layerAnim.avDefId = _avatar.avTypeId;
             if(_avatar.colors)
             {
-               _layerAnim.layers = setLayerHelper();
+               _layerAnim.layers = micoApplyPreviewOrder(setLayerHelper());
             }
          }
       }
@@ -167,7 +169,7 @@ package avatar
                   avTypeChangedCallback(this);
                }
             }
-            _layerAnim.layers = setLayerHelper();
+            _layerAnim.layers = micoApplyPreviewOrder(setLayerHelper());
             if(onAvatarChangedCallback != null)
             {
                onAvatarChangedCallback(this);
@@ -175,6 +177,57 @@ package avatar
          }
       }
       
+      // MICO-LAYERS-V2: a ordenacao do editor so afeta esta instancia.
+      // Outros jogadores mantem a ordem original ate a etapa de persistencia.
+      public function micoSetPreviewOrder(param1:Array) : void
+      {
+         _micoPreviewOrder = param1 == null ? null : param1.concat();
+         if(_layerAnim && _avatar)
+         {
+            _layerAnim.layers = micoApplyPreviewOrder(setLayerHelper());
+         }
+      }
+
+      private function micoComparePreviewOrder(param1:Object, param2:Object) : Number
+      {
+         return _micoPreviewOrder.indexOf(int(param1.i)) - _micoPreviewOrder.indexOf(int(param2.i));
+      }
+
+      protected function micoApplyPreviewOrder(param1:Array) : Array
+      {
+         if(!_micoPreviewOrder || _micoPreviewOrder.length < 2 || !param1)
+         {
+            return param1;
+         }
+         var selected:Array = [];
+         for each(var entry:Object in param1)
+         {
+            if(entry.t == 1 && _micoPreviewOrder.indexOf(int(entry.i)) >= 0)
+            {
+               selected.push(entry);
+            }
+         }
+         if(selected.length < 2)
+         {
+            return param1;
+         }
+         selected.sort(micoComparePreviewOrder);
+         var result:Array = [];
+         var index:int = 0;
+         for each(entry in param1)
+         {
+            if(entry.t == 1 && _micoPreviewOrder.indexOf(int(entry.i)) >= 0)
+            {
+               result.push(selected[index++]);
+            }
+            else
+            {
+               result.push(entry);
+            }
+         }
+         return result;
+      }
+
       protected function setLayerHelper() : Array
       {
          var _loc1_:AvatarInfo = null;
@@ -274,12 +327,14 @@ package avatar
                         _loc10_ = {
                            "l":_loc12_.accId,
                            "c":_loc7_,
-                           "d":_loc12_.defId
+                           "d":_loc12_.defId,
+                           "i":_loc12_.invIdx,
+                           "t":_loc12_.type
                         };
                         _loc11_.push(_loc10_);
                      }
                   }
-                  _layerAnim.layers = _loc11_;
+                  _layerAnim.layers = micoApplyPreviewOrder(_loc11_);
                }
                _layerAnim.hFlip = param2;
                _layerAnim.playAnim(param1,param3,param4);

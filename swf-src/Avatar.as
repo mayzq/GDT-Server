@@ -386,9 +386,9 @@ package avatar
          var _loc3_:int = 0;
          var _loc5_:AccItemCollection = param1.type == 0 ? inventoryBodyMod.itemCollection : inventoryClothing.itemCollection;
          var _loc6_:int = 0;
-         // up to three pieces of clothing may be worn in one place (head,
+         // up to five pieces of clothing may be worn in one place (head,
          // neck, back, legs, tail) where the game allowed one: something
-         // comes off only to make room for a fourth. eyes and patterns are
+         // comes off only to make room for a sixth. eyes and patterns are
          // one at a time as ever.
          if(param1.type != 0)
          {
@@ -403,7 +403,7 @@ package avatar
                _loc3_++;
             }
          }
-         _loc3_ = param1.type != 0 && _loc6_ < 3 ? _loc5_.length : 0;
+         _loc3_ = param1.type != 0 && _loc6_ < 5 ? _loc5_.length : 0;
          while(_loc3_ < _loc5_.length)
          {
             _loc4_ = _loc5_.getAccItem(_loc3_);

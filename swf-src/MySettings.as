@@ -8,6 +8,7 @@ package gui
    import flash.utils.setTimeout;
    import gui.itemWindows.ItemWindowToggle;
    import localization.LocalizationManager;
+   import mico.appearance.MicoAppearanceImages;
    
    public class MySettings
    {
@@ -57,6 +58,8 @@ package gui
       private var _listWidth:int;
       
       private var _listHeight:int;
+      private var _mainSettingsRows:Array;
+      private var _mainSettingsTitle:String;
       
       public function MySettings()
       {
@@ -83,6 +86,7 @@ package gui
          removeEventListeners();
          _popupLayer.removeChild(_mySettings);
          _closeCallback = null;
+         _mainSettingsRows = null;
          _mySettings = null;
          if(_toggleWindows)
          {
@@ -355,6 +359,17 @@ package gui
                "btnTxt":33035
             });
          }
+         _loc4_.unshift({
+            "type":TOGGLE_TYPE_JOIN,
+            "frame":"savedMenu",
+            "iconFrame":"nameBadge",
+            "labelLabel":"Aparência da placa",
+            "btnLabel":"Editar",
+            "kind":"open",
+            "run":showAppearanceSettings
+         });
+         _mainSettingsRows = _loc4_;
+         _mainSettingsTitle = _mySettings.titleTxt.text;
          _visibleRows = _loc2_;
          _listWidth = _loc3_;
          _listHeight = _loc5_;
@@ -368,6 +383,41 @@ package gui
          _toggleScrollBar.init(_toggleWindows,_loc3_,_loc5_,2,"scrollbar2",_toggleWindows.boxHeight + 4);
       }
       
+      private function showAppearanceSettings(action:String) : void
+      {
+         if(action == "back")
+         {
+            buildSubList(_mainSettingsTitle,_mainSettingsRows);
+            return;
+         }
+         if(action != "open")
+         {
+            MicoAppearanceImages.handleAction(action);
+            return;
+         }
+         buildSubList("Imagens da placa",[
+            appearanceRow("Nametag",MicoAppearanceImages.PLATE_REFERENCE,"plate"),
+            appearanceRow("Emblema",MicoAppearanceImages.BADGE_REFERENCE,"badge"),
+            appearanceRow("Nametag original","Restaurar","reset-plate"),
+            appearanceRow("Emblema original","Restaurar","reset-badge"),
+            appearanceRow("Configurações","Voltar","back")
+         ]);
+      }
+
+      private function appearanceRow(label:String, button:String, action:String) : Object
+      {
+         return {
+            "type":TOGGLE_TYPE_JOIN,
+            "frame":"savedMenu",
+            "iconFrame":"nameBadge",
+            "labelLabel":label,
+            "btnLabel":button,
+            "kind":action,
+            "openOnClick":action == "plate" || action == "badge",
+            "run":showAppearanceSettings
+         };
+      }
+
       private function showThemeList() : void
       {
          setTimeout(buildThemeList,1);
@@ -419,7 +469,7 @@ package gui
          // only as many rows as there are things to list: left to fill the
          // window, a short list (a few outfits) got rows with nothing in
          // them, which never finish loading, and nothing was shown.
-         _toggleWindows.init(1,_visibleRows,param2.length,0,4,0,ItemWindowToggle,param2,null,null,{"onClose":onClose},null,false,false);
+         _toggleWindows.init(1,_visibleRows,param2.length,0,4,0,ItemWindowToggle,param2,null,null,{"onClose":onClose,"onThemes":showThemeList},null,false,false);
          _mySettings.itemWindow.addChild(_toggleWindows);
          _toggleScrollBar = new SBScrollbar();
          _toggleScrollBar.init(_toggleWindows,_listWidth,_listHeight,2,"scrollbar2",_toggleWindows.boxHeight + 4);

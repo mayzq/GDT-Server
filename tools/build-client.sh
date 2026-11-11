@@ -35,6 +35,8 @@ set -- \
   com.sbi.graphics.PaletteHelper PaletteHelper.as \
   gui.ColorTable ColorTable.as \
   gui.MySettings MySettings.as \
+  avatar.NameBar NameBar.as \
+  mico.appearance.MicoAppearanceImages MicoAppearanceImages.as \
   gui.itemWindows.ItemWindowToggle ItemWindowToggle.as \
   gui.ReportAPlayer ReportAPlayer.as \
   gui.ECardCreation ECardCreation.as \
@@ -111,7 +113,7 @@ set -- \
 # not in the game: added before the replace (game.ArtStudioKit is Strawberry
 # Jam's, shared by its two art studio painters; gui.SitForwardAction is the
 # action of sitting facing forward)
-NEW_CLASSES="game.ArtStudioKit gui.SitForwardAction"
+NEW_CLASSES="game.ArtStudioKit gui.SitForwardAction mico.appearance.MicoAppearanceImages"
 args=""
 while [ $# -gt 0 ]; do
   args="$args $1 swf-src/$2"

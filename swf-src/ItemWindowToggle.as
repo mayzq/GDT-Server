@@ -122,6 +122,8 @@ package gui.itemWindows
       {
          var _loc1_:Boolean = false;
          _currHeight = _window.height;
+         _window.goNowBtn.removeEventListener(MouseEvent.MOUSE_DOWN,handleMouseDown);
+         _window.goNowBtn.removeEventListener(MouseEvent.CLICK,handleMouseDown);
          _window.goNowBtn.visible = false;
          _window.woodenCursorBtn.visible = false;
          _window.defaultCursorBtn.visible = false;
@@ -164,7 +166,7 @@ package gui.itemWindows
                break;
             case MySettings.TOGGLE_TYPE_JOIN:
                _window.goNowBtn.visible = true;
-               _window.goNowBtn.addEventListener("mouseDown",handleMouseDown,false,0,true);
+               _window.goNowBtn.addEventListener(_currItem.openOnClick ? MouseEvent.CLICK : MouseEvent.MOUSE_DOWN,handleMouseDown,false,0,true);
                if(_currItem.iconFrame == "house")
                {
                   _window.icon.gotoAndStop("denPlayerIcon");
